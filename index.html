@@ -4,6 +4,108 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Scoreboard</title>
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, addDoc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA1xcGeun5Hvus1VtevFwMi5nlzHr-Zdvo",
+  authDomain: "scoreboard-748a1.firebaseapp.com",
+  projectId: "scoreboard-748a1",
+  storageBucket: "scoreboard-748a1.firebasestorage.app",
+  messagingSenderId: "629431387823",
+  appId: "1:629431387823:web:f7282aff8c9af72110765a"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+// ─── FIRESTORE HELPERS ────────────────────────────────────────────────────────
+// We store everything in 3 Firestore docs/collections:
+//   /meta/config          → { players: [...], games: [...] }
+//   /sessions/{id}        → session objects
+
+async function fsLoadMeta() {
+  const snap = await getDoc(doc(db, 'meta', 'config'));
+  if (snap.exists()) {
+    const d = snap.data();
+    state.players = d.players || [];
+    state.games   = d.games   || ['Catan', 'Dominion'];
+  } else {
+    state.players = [];
+    state.games   = ['Catan', 'Dominion'];
+  }
+}
+
+async function fsSaveMeta() {
+  await setDoc(doc(db, 'meta', 'config'), {
+    players: state.players,
+    games:   state.games
+  });
+}
+
+async function fsSaveSession(session) {
+  // Use session.id as the Firestore document id
+  await setDoc(doc(db, 'sessions', String(session.id)), session);
+}
+
+async function fsDeleteSession(id) {
+  await deleteDoc(doc(db, 'sessions', String(id)));
+}
+
+async function fsUpdateSession(id, data) {
+  await updateDoc(doc(db, 'sessions', String(id)), data);
+}
+
+// ─── REAL-TIME LISTENERS ──────────────────────────────────────────────────────
+function startListeners() {
+  // Listen for meta changes (players/games)
+  onSnapshot(doc(db, 'meta', 'config'), (snap) => {
+    if (snap.exists()) {
+      const d = snap.data();
+      state.players = d.players || [];
+      state.games   = d.games   || ['Catan', 'Dominion'];
+      renderSetup();
+      refreshSelects();
+    }
+  });
+
+  // Listen for sessions collection changes
+  onSnapshot(collection(db, 'sessions'), (snap) => {
+    state.sessions = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    state.sessions.sort((a,b) => String(a.id).localeCompare(String(b.id)));
+    refreshSelects();
+    refreshYearFilters();
+    // Re-render whichever tab is active
+    const active = document.querySelector('.tab.active');
+    if (active) {
+      const idx = [...document.querySelectorAll('.tab')].indexOf(active);
+      if (idx === 1) { renderLeaderboard(); renderSessionLeaderboard(); }
+      if (idx === 2) renderHistory();
+    }
+  });
+}
+
+// ─── EXPOSE DB FUNCTIONS TO GLOBAL SCOPE ─────────────────────────────────────
+// (needed because the rest of the app is non-module script)
+window._fsSaveMeta    = fsSaveMeta;
+window._fsSaveSession = fsSaveSession;
+window._fsDeleteSession = fsDeleteSession;
+window._fsUpdateSession = fsUpdateSession;
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  showLoading(true);
+  await fsLoadMeta();
+  startListeners();
+  renderSetup();
+  refreshSelects();
+  refreshYearFilters();
+  document.getElementById('session-date').value = new Date().toISOString().slice(0,10);
+  showLoading(false);
+});
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -297,7 +399,39 @@
   .session-score-item { font-size: 0.9rem; color: var(--text-muted); }
   .session-score-item span { font-family: 'DM Mono', monospace; font-size: 0.95rem; }
 
-  /* HISTORY ACTIONS */
+  /* LOADING OVERLAY */
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .loading-overlay.active { display: flex; }
+  .loading-spinner {
+    width: 2rem; height: 2rem;
+    border: 3px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: var(--text-muted); font-style: italic; font-size: 0.95rem; }
+
+  /* SYNC INDICATOR */
+  .sync-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    margin-left: 0.5rem;
+    vertical-align: middle;
+    box-shadow: 0 0 6px var(--green);
+  }
   .session-actions { display: flex; gap: 0.5rem; }
   .btn-icon {
     background: transparent;
@@ -360,10 +494,14 @@
 </style>
 </head>
 <body>
+<div class="loading-overlay active" id="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Connecting to database…</div>
+</div>
 <div class="app">
   <header>
     <h1>The Scoreboard</h1>
-    <p class="subtitle">Zero-sum game tracker</p>
+    <p class="subtitle">Zero-sum game tracker <span class="sync-dot" title="Live sync active"></span></p>
   </header>
 
   <div class="tabs">
@@ -442,7 +580,7 @@
 
       <div class="mt-2" style="display:flex;gap:0.75rem;justify-content:flex-end">
         <button class="btn btn-outline" onclick="clearScores()">Clear</button>
-        <button class="btn btn-gold" id="save-btn" onclick="saveSession()">Save Session</button>
+        <button class="btn btn-gold" id="save-btn" onclick="saveSessionToDb()">Save Session</button>
       </div>
     </div>
 
@@ -533,12 +671,526 @@
 </div>
 
 <script>
-// ─── STATE ────────────────────────────────────────────────────────────────────
+// ─── STATE (in-memory, kept fresh by Firestore listeners) ────────────────────
 let state = { players: [], games: [], sessions: [] };
 let sessionPlayers = [];
 let winnerCount = 1;
-// winnerSplits: array of percentages [75, 25] for 2 winners, always sums to 100
 let winnerSplits = [100];
+
+// ─── LOADING ──────────────────────────────────────────────────────────────────
+function showLoading(on) {
+  document.getElementById('loading-overlay').classList.toggle('active', on);
+}
+
+// ─── SAVE WRAPPERS (call Firebase via window._fs* set by module script) ───────
+function saveMeta() {
+  if (window._fsSaveMeta) window._fsSaveMeta();
+}
+function saveSession(session) {
+  if (window._fsSaveSession) window._fsSaveSession(session);
+}
+function removeSession(id) {
+  if (window._fsDeleteSession) window._fsDeleteSession(id);
+}
+function updateSession(id, data) {
+  if (window._fsUpdateSession) window._fsUpdateSession(id, data);
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  const names = ['record','leaderboard','history','setup'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i] === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'leaderboard') { renderLeaderboard(); renderSessionLeaderboard(); }
+  if (name === 'history') renderHistory();
+}
+
+// ─── SETUP ────────────────────────────────────────────────────────────────────
+function addPlayer() {
+  const inp = document.getElementById('new-player-input');
+  const name = inp.value.trim();
+  if (!name || state.players.includes(name)) return;
+  state.players.push(name); inp.value = '';
+  saveMeta();
+}
+function removePlayer(name) {
+  state.players = state.players.filter(p => p !== name);
+  saveMeta();
+}
+function addGame() {
+  const inp = document.getElementById('new-game-input');
+  const name = inp.value.trim();
+  if (!name || state.games.includes(name)) return;
+  state.games.push(name); inp.value = '';
+  saveMeta();
+}
+function removeGame(name) {
+  state.games = state.games.filter(g => g !== name);
+  saveMeta();
+}
+function renderSetup() {
+  const pl = document.getElementById('players-list');
+  if (!pl) return;
+  pl.innerHTML = state.players.map(p =>
+    `<div class="tag">${esc(p)}<button class="remove" onclick="removePlayer('${esc(p)}')">×</button></div>`
+  ).join('') || '<span class="text-muted" style="font-size:0.9rem;font-style:italic">No players yet</span>';
+  const gl = document.getElementById('games-list');
+  gl.innerHTML = state.games.map(g =>
+    `<div class="tag">${esc(g)}<button class="remove" onclick="removeGame('${esc(g)}')">×</button></div>`
+  ).join('') || '<span class="text-muted" style="font-size:0.9rem;font-style:italic">No games yet</span>';
+}
+
+// ─── SELECTS ──────────────────────────────────────────────────────────────────
+function refreshSelects() {
+  const sg = document.getElementById('session-game');
+  if (sg) sg.innerHTML = state.games.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+  refreshSessionPlayerSelect();
+  const gameOpts = '<option value="all">All Games</option>' +
+    state.games.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+  const playerOpts = '<option value="all">All Players</option>' +
+    state.players.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  ['lb-game-filter','sr-game-filter','hist-game-filter'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.innerHTML = gameOpts;
+  });
+  const hpf = document.getElementById('hist-player-filter');
+  if (hpf) hpf.innerHTML = playerOpts;
+  refreshYearFilters();
+}
+function refreshSessionPlayerSelect() {
+  const available = state.players.filter(p => !sessionPlayers.includes(p));
+  const el = document.getElementById('session-player-select');
+  if (el) el.innerHTML = available.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+}
+function refreshYearFilters() {
+  const years = [...new Set(state.sessions.map(s => s.date?.slice(0,4)).filter(Boolean))].sort((a,b) => b-a);
+  const yearOpts = '<option value="all">All Years</option>' +
+    years.map(y => `<option value="${y}">${y}</option>`).join('');
+  ['lb-year-filter','sr-year-filter'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.innerHTML = yearOpts;
+  });
+}
+
+// ─── SESSION PLAYERS ──────────────────────────────────────────────────────────
+function addSessionPlayer() {
+  const sel = document.getElementById('session-player-select');
+  const name = sel.value;
+  if (!name || sessionPlayers.includes(name)) return;
+  sessionPlayers.push(name);
+  clampWinners();
+  renderSessionPlayerTags();
+  updateWinnerUI();
+  refreshSessionPlayerSelect();
+}
+function removeSessionPlayer(name) {
+  sessionPlayers = sessionPlayers.filter(p => p !== name);
+  clampWinners();
+  renderSessionPlayerTags();
+  updateWinnerUI();
+  refreshSessionPlayerSelect();
+}
+function renderSessionPlayerTags() {
+  document.getElementById('session-player-tags').innerHTML = sessionPlayers.map(p =>
+    `<div class="tag">${esc(p)}<button class="remove" onclick="removeSessionPlayer('${esc(p)}')">×</button></div>`
+  ).join('');
+}
+function clampWinners() {
+  const max = Math.max(1, sessionPlayers.length - 1);
+  winnerCount = Math.min(winnerCount, max);
+  if (winnerCount < 1) winnerCount = 1;
+  rebuildSplits();
+}
+
+// ─── WINNER SETTINGS ──────────────────────────────────────────────────────────
+function changeWinners(delta) {
+  const max = Math.max(1, sessionPlayers.length - 1);
+  winnerCount = Math.min(max, Math.max(1, winnerCount + delta));
+  rebuildSplits();
+  updateWinnerUI();
+}
+function rebuildSplits() {
+  winnerSplits = [];
+  if (winnerCount === 1) { winnerSplits = [100]; return; }
+  const base = Math.floor(100 / winnerCount);
+  for (let i = 0; i < winnerCount; i++) winnerSplits.push(base);
+  winnerSplits[0] += 100 - base * winnerCount;
+}
+function renderSplitRows() {
+  const wrap = document.getElementById('winner-distribution-wrap');
+  if (winnerCount <= 1) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  const ordinals = ['1st','2nd','3rd','4th','5th','6th','7th','8th'];
+  document.getElementById('split-rows').innerHTML = winnerSplits.map((pct, i) => `
+    <div class="split-row">
+      <label>${ordinals[i]} place</label>
+      <input type="number" class="split-pct" id="split-${i}" value="${pct}" min="0" max="100" step="1" oninput="onSplitChange(${i})">
+      <span class="split-label">%</span>
+    </div>
+  `).join('');
+  updateSplitHint();
+}
+function onSplitChange(i) {
+  winnerSplits[i] = parseFloat(document.getElementById('split-' + i).value) || 0;
+  updateSplitHint();
+  recalc();
+}
+function updateSplitHint() {
+  const total = winnerSplits.reduce((a,b) => a+b, 0);
+  const hint = document.getElementById('split-sum-hint');
+  if (Math.abs(total - 100) < 0.01) {
+    hint.textContent = '✓ Splits sum to 100%';
+    hint.style.color = 'var(--green-light)';
+  } else {
+    hint.textContent = `⚠ Splits sum to ${round2(total)}% — must equal 100%`;
+    hint.style.color = 'var(--red)';
+  }
+}
+function updateWinnerUI() {
+  const settingsCard = document.getElementById('winner-settings-card');
+  const scoreCard    = document.getElementById('score-entry-card');
+  if (sessionPlayers.length < 2) {
+    settingsCard.style.display = 'none';
+    scoreCard.style.display    = 'none';
+    return;
+  }
+  settingsCard.style.display = 'block';
+  scoreCard.style.display    = 'block';
+  document.getElementById('winner-count-display').textContent = winnerCount;
+  document.getElementById('winner-count-hint').textContent =
+    winnerCount === 1 ? 'Top 1 player wins' : `Top ${winnerCount} players win`;
+  document.getElementById('winner-distribution-wrap').style.display = winnerCount > 1 ? 'block' : 'none';
+  renderSplitRows();
+  renderScoreTable();
+  recalc();
+}
+
+// ─── SCORE TABLE ──────────────────────────────────────────────────────────────
+function renderScoreTable() {
+  document.getElementById('score-entry-body').innerHTML = sessionPlayers.map(p => `
+    <tr id="row-${sid(p)}">
+      <td id="name-${sid(p)}">${esc(p)}</td>
+      <td><input type="number" step="1" id="vp-${sid(p)}" value="" placeholder="VP" oninput="recalc()"></td>
+      <td class="result-cell score-zero" id="result-${sid(p)}">—</td>
+    </tr>
+  `).join('');
+}
+
+// ─── CORE CALCULATION ────────────────────────────────────────────────────────
+function calcScores() {
+  const vps = {};
+  for (const p of sessionPlayers) {
+    const el = document.getElementById('vp-' + sid(p));
+    const v = parseFloat(el?.value);
+    if (!el || el.value === '' || isNaN(v)) return null;
+    vps[p] = v;
+  }
+  const sorted = [...sessionPlayers].sort((a,b) => vps[b] - vps[a]);
+  const winners = sorted.slice(0, winnerCount);
+  const losers  = sorted.slice(winnerCount);
+
+  if (winnerCount > 1) {
+    const splitTotal = winnerSplits.reduce((a,b) => a+b, 0);
+    if (Math.abs(splitTotal - 100) > 0.5) return { invalid: 'splits', winners, losers, vps };
+  }
+
+  const top = winners[0];
+  const loserScores = {};
+  for (const loser of losers) {
+    loserScores[loser] = round2(vps[loser] - vps[top]);
+  }
+  const pool = round2(Object.values(loserScores).reduce((s,v) => s + Math.abs(v), 0));
+
+  const winnerScores = {};
+  if (winnerCount === 1) {
+    winnerScores[winners[0]] = pool;
+  } else {
+    winners.forEach((p,i) => { winnerScores[p] = round2(pool * (winnerSplits[i]||0) / 100); });
+    const winSum = round2(Object.values(winnerScores).reduce((a,b)=>a+b,0));
+    const diff = round2(pool - winSum);
+    if (diff !== 0) winnerScores[winners[0]] = round2(winnerScores[winners[0]] + diff);
+  }
+
+  return { scores: {...winnerScores, ...loserScores}, winners, losers, vps, pool, winnerScores, loserScores };
+}
+
+function recalc() {
+  const result = calcScores();
+  if (!result) {
+    sessionPlayers.forEach(p => {
+      const el = document.getElementById('result-' + sid(p));
+      if (el) { el.textContent = '—'; el.className = 'result-cell score-zero'; }
+      const nameEl = document.getElementById('name-' + sid(p));
+      if (nameEl) nameEl.innerHTML = esc(p);
+    });
+    document.getElementById('preview-strip').style.display = 'none';
+    return;
+  }
+  const { scores, winners, invalid } = result;
+  sessionPlayers.forEach(p => {
+    const isWinner = winners.includes(p);
+    const nameEl = document.getElementById('name-' + sid(p));
+    if (nameEl) nameEl.innerHTML = esc(p) + (isWinner ? `<span class="winner-badge">Winner</span>` : '');
+    const resEl = document.getElementById('result-' + sid(p));
+    if (resEl) {
+      if (invalid) { resEl.className = 'result-cell score-zero'; resEl.textContent = '—'; }
+      else {
+        const pts = scores[p] ?? 0;
+        resEl.className = 'result-cell ' + (pts > 0 ? 'score-pos' : pts < 0 ? 'score-neg' : 'score-zero');
+        resEl.textContent = (pts > 0 ? '+' : '') + pts;
+      }
+    }
+  });
+  const strip = document.getElementById('preview-strip');
+  if (invalid === 'splits') {
+    strip.style.display = 'block';
+    strip.innerHTML = '<span style="color:var(--red)">⚠ Fix the winner splits above to see results.</span>';
+    return;
+  }
+  const allSorted = [...sessionPlayers].sort((a,b) => (scores[b]??0) - (scores[a]??0));
+  strip.style.display = 'block';
+  strip.innerHTML = allSorted.map(p => {
+    const pts = scores[p] ?? 0;
+    const cls = pts > 0 ? 'score-pos' : pts < 0 ? 'score-neg' : 'score-zero';
+    return `${esc(p)}: <span class="${cls}">${pts>0?'+':''}${pts}</span>`;
+  }).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+}
+
+// ─── SAVE SESSION ─────────────────────────────────────────────────────────────
+function saveSessionToDb() {
+  const result = calcScores();
+  if (!result) { alert('Please enter victory points for all players.'); return; }
+  if (result.invalid) { alert('Please make sure winner splits sum to 100%.'); return; }
+
+  const { scores, vps } = result;
+  const game = document.getElementById('session-game').value;
+  const date = document.getElementById('session-date').value || new Date().toISOString().slice(0,10);
+  const id   = String(Date.now());
+
+  const session = { id, game, date, scores, vps, winnerCount, winnerSplits: [...winnerSplits] };
+  saveSession(session);
+
+  // Reset form
+  sessionPlayers = [];
+  winnerCount = 1;
+  winnerSplits = [100];
+  renderSessionPlayerTags();
+  updateWinnerUI();
+  document.getElementById('session-date').value = new Date().toISOString().slice(0,10);
+
+  const btn = document.getElementById('save-btn');
+  const orig = btn.textContent;
+  btn.textContent = '✓ Saved!';
+  btn.style.background = 'var(--green)';
+  setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 1800);
+}
+
+function clearScores() {
+  sessionPlayers.forEach(p => {
+    const inp = document.getElementById('vp-' + sid(p));
+    if (inp) inp.value = '';
+  });
+  recalc();
+}
+
+// ─── LEADERBOARD ─────────────────────────────────────────────────────────────
+function renderLeaderboard() {
+  const gf = document.getElementById('lb-game-filter').value;
+  const yf = document.getElementById('lb-year-filter').value;
+  let sessions = state.sessions;
+  if (gf !== 'all') sessions = sessions.filter(s => s.game === gf);
+  if (yf !== 'all') sessions = sessions.filter(s => s.date?.startsWith(yf));
+  const totals = {}, counts = {};
+  sessions.forEach(s => Object.entries(s.scores).forEach(([p,sc]) => {
+    totals[p] = (totals[p]||0) + sc;
+    counts[p] = (counts[p]||0) + 1;
+  }));
+  const sorted = Object.entries(totals).sort((a,b) => b[1]-a[1]);
+  const el = document.getElementById('leaderboard-container');
+  if (!sorted.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🎲</div>No sessions recorded yet</div>'; return; }
+  el.innerHTML = `<table class="leaderboard"><thead><tr><th>#</th><th>Player</th><th>Sessions</th><th>Total Score</th></tr></thead><tbody>
+    ${sorted.map(([p,sc],i) => `<tr>
+      <td><span class="rank rank-${i+1}">${i+1}</span></td>
+      <td>${esc(p)}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:0.9rem;color:var(--text-muted)">${counts[p]}</td>
+      <td class="${sc>0?'score-pos':sc<0?'score-neg':'score-zero'}">${sc>0?'+':''}${sc}</td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+
+function renderSessionLeaderboard() {
+  const gf = document.getElementById('sr-game-filter').value;
+  const yf = document.getElementById('sr-year-filter').value;
+  let sessions = state.sessions;
+  if (gf !== 'all') sessions = sessions.filter(s => s.game === gf);
+  if (yf !== 'all') sessions = sessions.filter(s => s.date?.startsWith(yf));
+  const wins = {};
+  sessions.forEach(s => {
+    const entries = Object.entries(s.scores);
+    if (!entries.length) return;
+    const max = Math.max(...entries.map(x=>x[1]));
+    entries.filter(([,v])=>v===max).forEach(([p])=>{ wins[p]=(wins[p]||0)+1; });
+  });
+  const sorted = Object.entries(wins).sort((a,b)=>b[1]-a[1]);
+  const el = document.getElementById('session-leaderboard-container');
+  if (!sorted.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🏆</div>No sessions recorded yet</div>'; return; }
+  el.innerHTML = `<table class="leaderboard"><thead><tr><th>#</th><th>Player</th><th>Session Wins</th></tr></thead><tbody>
+    ${sorted.map(([p,w],i) => `<tr>
+      <td><span class="rank rank-${i+1}">${i+1}</span></td>
+      <td>${esc(p)}</td>
+      <td class="score-pos">+${w}</td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+
+// ─── HISTORY ─────────────────────────────────────────────────────────────────
+function renderHistory() {
+  const gf = document.getElementById('hist-game-filter').value;
+  const pf = document.getElementById('hist-player-filter').value;
+  let sessions = [...state.sessions].reverse();
+  if (gf !== 'all') sessions = sessions.filter(s => s.game === gf);
+  if (pf !== 'all') sessions = sessions.filter(s => Object.keys(s.scores).includes(pf));
+  const el = document.getElementById('history-container');
+  if (!sessions.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📜</div>No sessions found</div>'; return; }
+  el.innerHTML = sessions.map(s => {
+    const sorted = Object.entries(s.scores).sort((a,b)=>b[1]-a[1]);
+    return `<div class="session-entry">
+      <div class="session-header">
+        <span class="session-game">${esc(s.game)}</span>
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          <span class="session-date">${s.date}</span>
+          <div class="session-actions">
+            <button class="btn-icon" onclick="openEditModal('${s.id}')">Edit</button>
+            <button class="btn-icon danger" data-delete-id="${s.id}" onclick="deleteSession('${s.id}', false)">Delete</button>
+          </div>
+        </div>
+      </div>
+      <div class="session-scores">
+        ${sorted.map(([p,sc]) => `<div class="session-score-item">${esc(p)}: <span class="${sc>0?'score-pos':sc<0?'score-neg':'score-zero'}">${sc>0?'+':''}${sc}</span></div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function deleteSession(id, confirmed) {
+  if (!confirmed) {
+    const btn = document.querySelector(`[data-delete-id="${id}"]`);
+    if (btn) {
+      btn.textContent = 'Sure?';
+      btn.style.borderColor = 'var(--red)';
+      btn.style.color = 'var(--red)';
+      btn.setAttribute('onclick', `deleteSession('${id}', true)`);
+      setTimeout(() => {
+        if (btn.textContent === 'Sure?') {
+          btn.textContent = 'Delete';
+          btn.style.borderColor = '';
+          btn.style.color = '';
+          btn.setAttribute('onclick', `deleteSession('${id}', false)`);
+        }
+      }, 3000);
+    }
+    return;
+  }
+  removeSession(id);
+  // UI updates via real-time listener
+}
+
+// ─── EDIT MODAL ───────────────────────────────────────────────────────────────
+let editingId = null;
+
+function openEditModal(id) {
+  const session = state.sessions.find(s => String(s.id) === String(id));
+  if (!session) return;
+  editingId = id;
+  document.getElementById('edit-game').innerHTML =
+    state.games.map(g => `<option value="${esc(g)}" ${g===session.game?'selected':''}>${esc(g)}</option>`).join('');
+  document.getElementById('edit-date').value = session.date;
+  const players = Object.keys(session.vps || session.scores);
+  document.getElementById('edit-vp-rows').innerHTML = players.map(p => `
+    <div class="row" style="margin-bottom:0.5rem">
+      <div class="field" style="max-width:150px"><label>${esc(p)}</label></div>
+      <div class="field" style="max-width:100px">
+        <input type="number" id="edit-vp-${sid(p)}" value="${session.vps?.[p] ?? ''}" placeholder="VP"
+          style="font-family:'DM Mono',monospace">
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.remove('open');
+  editingId = null;
+}
+
+function saveEdit() {
+  const session = state.sessions.find(s => String(s.id) === String(editingId));
+  if (!session) return;
+  const players = Object.keys(session.vps || session.scores);
+  const newVps = {};
+  for (const p of players) {
+    const v = parseFloat(document.getElementById('edit-vp-' + sid(p))?.value);
+    if (isNaN(v)) { alert(`Please enter a valid VP for ${p}.`); return; }
+    newVps[p] = v;
+  }
+  const wCount = session.winnerCount || 1;
+  const splits = session.winnerSplits || [100];
+  const sorted = [...players].sort((a,b) => newVps[b] - newVps[a]);
+  const winners = sorted.slice(0, wCount);
+  const losers  = sorted.slice(wCount);
+  const top = winners[0];
+  const loserScores = {};
+  for (const loser of losers) loserScores[loser] = round2(newVps[loser] - newVps[top]);
+  const pool = round2(Object.values(loserScores).reduce((s,v) => s + Math.abs(v), 0));
+  const winnerScores = {};
+  if (wCount === 1) {
+    winnerScores[winners[0]] = pool;
+  } else {
+    winners.forEach((p,i) => { winnerScores[p] = round2(pool * (splits[i]||0) / 100); });
+    const winSum = round2(Object.values(winnerScores).reduce((a,b)=>a+b,0));
+    const diff = round2(pool - winSum);
+    if (diff !== 0) winnerScores[winners[0]] = round2(winnerScores[winners[0]] + diff);
+  }
+  const updatedData = {
+    vps: newVps,
+    scores: { ...winnerScores, ...loserScores },
+    game: document.getElementById('edit-game').value,
+    date: document.getElementById('edit-date').value
+  };
+  updateSession(editingId, updatedData);
+  closeEditModal();
+}
+
+document.addEventListener('click', function(e) {
+  if (e.target.id === 'edit-modal') closeEditModal();
+});
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function sid(str) { return String(str).replace(/[^a-zA-Z0-9]/g,'_'); }
+function round2(n) { return Math.round(n * 100) / 100; }
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'scoreboard-export.json';
+  a.click();
+}
+
+function clearAllData() {
+  if (confirm('Clear ALL data? This cannot be undone.')) {
+    state.players = [];
+    state.games   = ['Catan','Dominion'];
+    saveMeta();
+    // Delete all sessions
+    state.sessions.forEach(s => removeSession(s.id));
+    sessionPlayers=[]; winnerCount=1; winnerSplits=[100];
+    renderSessionPlayerTags(); updateWinnerUI();
+  }
+}
+</script>
 
 // ─── STORAGE ──────────────────────────────────────────────────────────────────
 function save() {
@@ -1121,11 +1773,9 @@ function clearAllData() {
   }
 }
 
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-load();
-renderSetup();
-refreshSelects();
-document.getElementById('session-date').value = new Date().toISOString().slice(0,10);
+// ─── INIT (Firebase module handles boot via DOMContentLoaded) ─────────────────
+// Stub so any early calls don't throw before module fires
+
 </script>
 
 <!-- EDIT SESSION MODAL -->
