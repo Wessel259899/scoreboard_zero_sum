@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Scoreboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1a13;
+    --surface: #162019;
+    --surface2: #1e2d22;
+    --border: #2a3d2e;
+    --gold: #c9a84c;
+    --gold-light: #e8c97a;
+    --green: #4a8c5c;
+    --green-light: #6ab87a;
+    --red: #c45c5c;
+    --text: #e8e0d0;
+    --text-muted: #8a9e8d;
+    --radius: 6px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Crimson Text', serif;
+    font-size: 18px;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse at 20% 0%, rgba(74,140,92,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 100%, rgba(201,168,76,0.06) 0%, transparent 60%);
+  }
+
+  .app { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+  header {
+    text-align: center;
+    padding: 2.5rem 0 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+    position: relative;
+  }
+  header::before, header::after {
+    content: '✦';
+    color: var(--gold);
+    font-size: 0.9rem;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-60%);
+  }
+  header::before { left: 0; }
+  header::after { right: 0; }
+
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 3rem;
+    font-weight: 900;
+    color: var(--gold);
+    letter-spacing: 0.02em;
+    line-height: 1;
+  }
+  .subtitle {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 1rem;
+    margin-top: 0.4rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .tabs {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+  .tab {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    background: var(--surface);
+    border: none;
+    color: var(--text-muted);
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-right: 1px solid var(--border);
+  }
+  .tab:last-child { border-right: none; }
+  .tab:hover { background: var(--surface2); color: var(--text); }
+  .tab.active { background: var(--surface2); color: var(--gold); border-bottom: 2px solid var(--gold); }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .card-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.2rem;
+    color: var(--gold);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .card-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .row { display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; }
+  .field { display: flex; flex-direction: column; gap: 0.4rem; flex: 1; min-width: 120px; }
+  label { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+  input, select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: 'Crimson Text', serif;
+    font-size: 1rem;
+    padding: 0.6rem 0.8rem;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+  input:focus, select:focus { border-color: var(--gold); }
+  select option { background: var(--bg); }
+
+  .btn {
+    padding: 0.65rem 1.2rem;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: 'Playfair Display', serif;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .btn-gold { background: var(--gold); color: #1a1208; font-weight: 700; }
+  .btn-gold:hover { background: var(--gold-light); }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
+  .btn-outline:hover { border-color: var(--gold); color: var(--gold); }
+  .btn-danger { background: transparent; border: 1px solid transparent; color: var(--red); font-size: 0.85rem; }
+  .btn-danger:hover { border-color: var(--red); }
+  .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+  .tag {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .tag .remove { cursor: pointer; color: var(--red); font-size: 1rem; line-height: 1; background: none; border: none; padding: 0; }
+  .tag .remove:hover { color: #ff8080; }
+
+  /* ── WINNER SETTINGS ── */
+  .winner-count-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+  }
+  .stepper {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .stepper button {
+    background: var(--surface2);
+    border: none;
+    color: var(--text);
+    font-size: 1.2rem;
+    width: 2.4rem;
+    height: 2.4rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .stepper button:hover { background: var(--border); }
+  .stepper span {
+    padding: 0 1rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 1.1rem;
+    color: var(--gold);
+    min-width: 3rem;
+    text-align: center;
+  }
+
+  /* split rows */
+  .split-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+  .split-row label { min-width: 80px; margin: 0; }
+  .split-pct {
+    width: 80px !important;
+    font-family: 'DM Mono', monospace !important;
+    font-size: 1rem !important;
+  }
+  .split-label { color: var(--text-muted); font-size: 0.9rem; }
+
+  /* ── SCORE TABLE ── */
+  .score-table { width: 100%; border-collapse: collapse; }
+  .score-table th {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--gold);
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .score-table th.right { text-align: right; }
+  .score-table td { padding: 0.55rem 0.75rem; border-bottom: 1px solid rgba(42,61,46,0.4); vertical-align: middle; }
+  .score-table tr:last-child td { border-bottom: none; }
+  .score-table input[type="number"] { width: 80px; padding: 0.4rem 0.6rem; font-family: 'DM Mono', monospace; font-size: 0.95rem; }
+
+  .result-cell { font-family: 'DM Mono', monospace; font-size: 1rem; text-align: right; }
+  .score-pos { color: var(--green-light); }
+  .score-neg { color: var(--red); }
+  .score-zero { color: var(--text-muted); }
+
+  .winner-badge {
+    display: inline-block;
+    font-size: 0.68rem;
+    background: rgba(201,168,76,0.15);
+    color: var(--gold);
+    border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 20px;
+    padding: 0.1rem 0.5rem;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+    font-family: 'Crimson Text', serif;
+    letter-spacing: 0.05em;
+  }
+
+  /* preview */
+  .preview-strip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+  .preview-strip strong { color: var(--text); }
+
+  /* LEADERBOARD */
+  .leaderboard { width: 100%; border-collapse: collapse; }
+  .leaderboard th {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+  .leaderboard th:last-child { text-align: right; }
+  .leaderboard td { padding: 0.65rem 0.75rem; border-bottom: 1px solid rgba(42,61,46,0.4); font-size: 1rem; }
+  .leaderboard td:last-child { text-align: right; font-family: 'DM Mono', monospace; }
+  .leaderboard tr:last-child td { border-bottom: none; }
+  .leaderboard tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .rank { font-family: 'Playfair Display', serif; font-weight: 700; width: 2rem; display: inline-block; text-align: center; }
+  .rank-1 { color: var(--gold); }
+  .rank-2 { color: #c0c0c0; }
+  .rank-3 { color: #cd7f32; }
+
+  /* HISTORY */
+  .session-entry { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 0.75rem; }
+  .session-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+  .session-game { font-family: 'Playfair Display', serif; font-size: 1.05rem; color: var(--gold); }
+  .session-date { font-size: 0.8rem; color: var(--text-muted); font-style: italic; }
+  .session-scores { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  .session-score-item { font-size: 0.9rem; color: var(--text-muted); }
+  .session-score-item span { font-family: 'DM Mono', monospace; font-size: 0.95rem; }
+
+  /* HISTORY ACTIONS */
+  .session-actions { display: flex; gap: 0.5rem; }
+  .btn-icon {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0.25rem 0.6rem;
+    transition: all 0.2s;
+    font-family: 'Crimson Text', serif;
+  }
+  .btn-icon:hover { border-color: var(--gold); color: var(--gold); }
+  .btn-icon.danger:hover { border-color: var(--red); color: var(--red); }
+
+  /* MODAL */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    width: 100%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    margin: 1rem;
+  }
+  .modal-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.3rem;
+    color: var(--gold);
+    margin-bottom: 1.25rem;
+  }
+  .modal-field { margin-bottom: 1rem; }
+  .modal-field label { display: block; margin-bottom: 0.4rem; }
+  .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; }
+
+  .filter-row { display: flex; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .filter-row select { max-width: 200px; }
+
+  .text-muted { color: var(--text-muted); }
+  .mt-1 { margin-top: 0.5rem; }
+  .mt-2 { margin-top: 1rem; }
+
+  @media (max-width: 600px) {
+    h1 { font-size: 2.2rem; }
+    .row { flex-direction: column; }
+    .filter-row select { max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>The Scoreboard</h1>
+    <p class="subtitle">Zero-sum game tracker</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('record')">Record Session</button>
+    <button class="tab" onclick="switchTab('leaderboard')">Leaderboard</button>
+    <button class="tab" onclick="switchTab('history')">History</button>
+    <button class="tab" onclick="switchTab('setup')">Setup</button>
+  </div>
+
+  <!-- RECORD SESSION -->
+  <div class="panel active" id="panel-record">
+
+    <!-- Step 1: Game + Players -->
+    <div class="card">
+      <div class="card-title">Session Details</div>
+      <div class="row">
+        <div class="field">
+          <label>Game</label>
+          <select id="session-game"></select>
+        </div>
+        <div class="field">
+          <label>Date</label>
+          <input type="date" id="session-date">
+        </div>
+      </div>
+      <div class="mt-2">
+        <label style="display:block;margin-bottom:0.4rem">Players in this session</label>
+        <div id="session-player-tags" class="tags"></div>
+        <div class="row mt-1">
+          <div class="field"><select id="session-player-select"></select></div>
+          <button class="btn btn-outline btn-sm" onclick="addSessionPlayer()">+ Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Winner Settings -->
+    <div class="card" id="winner-settings-card" style="display:none">
+      <div class="card-title">Winner Settings</div>
+
+      <div class="winner-count-row">
+        <label style="margin:0;white-space:nowrap">Number of winners</label>
+        <div class="stepper">
+          <button onclick="changeWinners(-1)">−</button>
+          <span id="winner-count-display">1</span>
+          <button onclick="changeWinners(+1)">+</button>
+        </div>
+        <span class="text-muted" style="font-size:0.9rem;font-style:italic" id="winner-count-hint">Top 1 player wins</span>
+      </div>
+
+      <div id="winner-distribution-wrap" style="display:none">
+        <label style="display:block;margin-bottom:0.5rem">Split of the winner's pool among winners</label>
+        <div id="split-rows"></div>
+        <p class="text-muted mt-1" style="font-size:0.85rem;font-style:italic" id="split-sum-hint"></p>
+      </div>
+    </div>
+
+    <!-- Step 3: VP Entry + Preview -->
+    <div class="card" id="score-entry-card" style="display:none">
+      <div class="card-title">Enter Victory Points</div>
+      <p class="text-muted" style="font-size:0.9rem;margin-bottom:1rem;font-style:italic">
+        Enter each player's raw in-game score. Zero-sum points will be calculated automatically.
+      </p>
+
+      <table class="score-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Victory Points</th>
+            <th class="right">Points Earned</th>
+          </tr>
+        </thead>
+        <tbody id="score-entry-body"></tbody>
+      </table>
+
+      <div id="preview-strip" class="preview-strip mt-1" style="display:none"></div>
+
+      <div class="mt-2" style="display:flex;gap:0.75rem;justify-content:flex-end">
+        <button class="btn btn-outline" onclick="clearScores()">Clear</button>
+        <button class="btn btn-gold" id="save-btn" onclick="saveSession()">Save Session</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div class="panel" id="panel-leaderboard">
+    <div class="card">
+      <div class="card-title">All-Time Standings</div>
+      <div class="filter-row">
+        <div class="field">
+          <label>Filter by game</label>
+          <select id="lb-game-filter" onchange="renderLeaderboard()"><option value="all">All Games</option></select>
+        </div>
+        <div class="field">
+          <label>Filter by year</label>
+          <select id="lb-year-filter" onchange="renderLeaderboard()"><option value="all">All Years</option></select>
+        </div>
+      </div>
+      <div id="leaderboard-container"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Session Wins</div>
+      <div class="filter-row">
+        <div class="field">
+          <label>Filter by game</label>
+          <select id="sr-game-filter" onchange="renderSessionLeaderboard()"><option value="all">All Games</option></select>
+        </div>
+        <div class="field">
+          <label>Filter by year</label>
+          <select id="sr-year-filter" onchange="renderSessionLeaderboard()"><option value="all">All Years</option></select>
+        </div>
+      </div>
+      <div id="session-leaderboard-container"></div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="panel" id="panel-history">
+    <div class="card">
+      <div class="card-title">Session History</div>
+      <div class="filter-row">
+        <div class="field">
+          <label>Filter by game</label>
+          <select id="hist-game-filter" onchange="renderHistory()"><option value="all">All Games</option></select>
+        </div>
+        <div class="field">
+          <label>Filter by player</label>
+          <select id="hist-player-filter" onchange="renderHistory()"><option value="all">All Players</option></select>
+        </div>
+      </div>
+      <div id="history-container"></div>
+    </div>
+  </div>
+
+  <!-- SETUP -->
+  <div class="panel" id="panel-setup">
+    <div class="card">
+      <div class="card-title">Players</div>
+      <div class="row">
+        <div class="field">
+          <label>New player name</label>
+          <input type="text" id="new-player-input" placeholder="e.g. Alice" onkeydown="if(event.key==='Enter')addPlayer()">
+        </div>
+        <button class="btn btn-gold" onclick="addPlayer()">Add Player</button>
+      </div>
+      <div id="players-list" class="tags mt-2"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Games</div>
+      <div class="row">
+        <div class="field">
+          <label>New game name</label>
+          <input type="text" id="new-game-input" placeholder="e.g. Catan" onkeydown="if(event.key==='Enter')addGame()">
+        </div>
+        <button class="btn btn-gold" onclick="addGame()">Add Game</button>
+      </div>
+      <div id="games-list" class="tags mt-2"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Data</div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+        <button class="btn btn-outline" onclick="exportData()">Export JSON</button>
+        <button class="btn btn-danger" onclick="clearAllData()">Clear All Data</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let state = { players: [], games: [], sessions: [] };
+let sessionPlayers = [];
+let winnerCount = 1;
+// winnerSplits: array of percentages [75, 25] for 2 winners, always sums to 100
+let winnerSplits = [100];
+
+// ─── STORAGE ──────────────────────────────────────────────────────────────────
+function save() {
+  try { localStorage.setItem('scoreboard_v1', JSON.stringify(state)); } catch(e) {}
+}
+function load() {
+  try { const r = localStorage.getItem('scoreboard_v1'); if (r) state = JSON.parse(r); } catch(e) {}
+  if (!state.players)  state.players  = [];
+  if (!state.games)    state.games    = [];
+  if (!state.sessions) state.sessions = [];
+  if (state.games.length === 0) state.games = ['Catan', 'Dominion'];
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  const names = ['record','leaderboard','history','setup'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i] === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'leaderboard') { renderLeaderboard(); renderSessionLeaderboard(); }
+  if (name === 'history') renderHistory();
+}
+
+// ─── SETUP ────────────────────────────────────────────────────────────────────
+function addPlayer() {
+  const inp = document.getElementById('new-player-input');
+  const name = inp.value.trim();
+  if (!name || state.players.includes(name)) return;
+  state.players.push(name); save(); inp.value = '';
+  renderSetup(); refreshSelects();
+}
+function removePlayer(name) {
+  state.players = state.players.filter(p => p !== name); save();
+  renderSetup(); refreshSelects();
+}
+function addGame() {
+  const inp = document.getElementById('new-game-input');
+  const name = inp.value.trim();
+  if (!name || state.games.includes(name)) return;
+  state.games.push(name); save(); inp.value = '';
+  renderSetup(); refreshSelects();
+}
+function removeGame(name) {
+  state.games = state.games.filter(g => g !== name); save();
+  renderSetup(); refreshSelects();
+}
+function renderSetup() {
+  const pl = document.getElementById('players-list');
+  pl.innerHTML = state.players.map(p =>
+    `<div class="tag">${esc(p)}<button class="remove" onclick="removePlayer('${esc(p)}')">×</button></div>`
+  ).join('') || '<span class="text-muted" style="font-size:0.9rem;font-style:italic">No players yet</span>';
+  const gl = document.getElementById('games-list');
+  gl.innerHTML = state.games.map(g =>
+    `<div class="tag">${esc(g)}<button class="remove" onclick="removeGame('${esc(g)}')">×</button></div>`
+  ).join('') || '<span class="text-muted" style="font-size:0.9rem;font-style:italic">No games yet</span>';
+}
+
+// ─── SELECTS ──────────────────────────────────────────────────────────────────
+function refreshSelects() {
+  document.getElementById('session-game').innerHTML =
+    state.games.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+  refreshSessionPlayerSelect();
+  const gameOpts = '<option value="all">All Games</option>' +
+    state.games.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+  const playerOpts = '<option value="all">All Players</option>' +
+    state.players.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  ['lb-game-filter','sr-game-filter','hist-game-filter'].forEach(id =>
+    document.getElementById(id).innerHTML = gameOpts);
+  document.getElementById('hist-player-filter').innerHTML = playerOpts;
+  refreshYearFilters();
+}
+
+function refreshYearFilters() {
+  const years = [...new Set(state.sessions.map(s => s.date?.slice(0,4)).filter(Boolean))].sort((a,b) => b-a);
+  const yearOpts = '<option value="all">All Years</option>' +
+    years.map(y => `<option value="${y}">${y}</option>`).join('');
+  ['lb-year-filter','sr-year-filter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = yearOpts;
+  });
+}
+function refreshSessionPlayerSelect() {
+  const available = state.players.filter(p => !sessionPlayers.includes(p));
+  document.getElementById('session-player-select').innerHTML =
+    available.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+}
+
+// ─── SESSION PLAYERS ──────────────────────────────────────────────────────────
+function addSessionPlayer() {
+  const sel = document.getElementById('session-player-select');
+  const name = sel.value;
+  if (!name || sessionPlayers.includes(name)) return;
+  sessionPlayers.push(name);
+  clampWinners();
+  renderSessionPlayerTags();
+  updateWinnerUI();
+  refreshSessionPlayerSelect();
+}
+function removeSessionPlayer(name) {
+  sessionPlayers = sessionPlayers.filter(p => p !== name);
+  clampWinners();
+  renderSessionPlayerTags();
+  updateWinnerUI();
+  refreshSessionPlayerSelect();
+}
+function renderSessionPlayerTags() {
+  document.getElementById('session-player-tags').innerHTML = sessionPlayers.map(p =>
+    `<div class="tag">${esc(p)}<button class="remove" onclick="removeSessionPlayer('${esc(p)}')">×</button></div>`
+  ).join('');
+}
+function clampWinners() {
+  const max = Math.max(1, sessionPlayers.length - 1);
+  winnerCount = Math.min(winnerCount, max);
+  if (winnerCount < 1) winnerCount = 1;
+  rebuildSplits();
+}
+
+// ─── WINNER SETTINGS ──────────────────────────────────────────────────────────
+function changeWinners(delta) {
+  const max = Math.max(1, sessionPlayers.length - 1);
+  winnerCount = Math.min(max, Math.max(1, winnerCount + delta));
+  rebuildSplits();
+  updateWinnerUI();
+}
+
+// Build default even splits when winner count changes
+function rebuildSplits() {
+  winnerSplits = [];
+  if (winnerCount === 1) { winnerSplits = [100]; return; }
+  // Default: distribute 100% evenly, last gets remainder
+  const base = Math.floor(100 / winnerCount);
+  for (let i = 0; i < winnerCount; i++) winnerSplits.push(base);
+  winnerSplits[0] += 100 - base * winnerCount; // give remainder to 1st
+}
+
+function renderSplitRows() {
+  const wrap = document.getElementById('winner-distribution-wrap');
+  if (winnerCount <= 1) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+
+  const ordinals = ['1st','2nd','3rd','4th','5th','6th','7th','8th'];
+  document.getElementById('split-rows').innerHTML = winnerSplits.map((pct, i) => `
+    <div class="split-row">
+      <label>${ordinals[i]} place</label>
+      <input type="number" class="split-pct" id="split-${i}" value="${pct}" min="0" max="100" step="1" oninput="onSplitChange(${i})">
+      <span class="split-label">%</span>
+    </div>
+  `).join('');
+  updateSplitHint();
+}
+
+function onSplitChange(i) {
+  winnerSplits[i] = parseFloat(document.getElementById('split-' + i).value) || 0;
+  updateSplitHint();
+  recalc();
+}
+
+function updateSplitHint() {
+  const total = winnerSplits.reduce((a,b) => a+b, 0);
+  const hint = document.getElementById('split-sum-hint');
+  if (Math.abs(total - 100) < 0.01) {
+    hint.textContent = '✓ Splits sum to 100%';
+    hint.style.color = 'var(--green-light)';
+  } else {
+    hint.textContent = `⚠ Splits sum to ${round2(total)}% — must equal 100%`;
+    hint.style.color = 'var(--red)';
+  }
+}
+
+function updateWinnerUI() {
+  const settingsCard = document.getElementById('winner-settings-card');
+  const scoreCard    = document.getElementById('score-entry-card');
+
+  if (sessionPlayers.length < 2) {
+    settingsCard.style.display = 'none';
+    scoreCard.style.display    = 'none';
+    return;
+  }
+
+  settingsCard.style.display = 'block';
+  scoreCard.style.display    = 'block';
+
+  document.getElementById('winner-count-display').textContent = winnerCount;
+  document.getElementById('winner-count-hint').textContent =
+    winnerCount === 1 ? 'Top 1 player wins' : `Top ${winnerCount} players win`;
+
+  renderSplitRows();
+  renderScoreTable();
+  recalc();
+}
+
+// ─── SCORE TABLE ──────────────────────────────────────────────────────────────
+function renderScoreTable() {
+  document.getElementById('score-entry-body').innerHTML = sessionPlayers.map(p => `
+    <tr id="row-${sid(p)}">
+      <td id="name-${sid(p)}">${esc(p)}</td>
+      <td><input type="number" step="1" id="vp-${sid(p)}" value="" placeholder="VP" oninput="recalc()"></td>
+      <td class="result-cell score-zero" id="result-${sid(p)}">—</td>
+    </tr>
+  `).join('');
+}
+
+// ─── CORE ZERO-SUM CALCULATION ────────────────────────────────────────────────
+/*
+  Step 1: Compute each loser's penalty using pairwise differences vs the winner(s).
+          Loser score = sum of (loser_VP - winner_VP) for each winner
+                      = always negative (since winners have higher VP)
+
+  Step 2: The positive pool = sum of all losers' absolute penalties.
+          This is distributed to winners according to the split percentages.
+
+  Example (1 winner, A=100, B=80, C=40):
+    B penalty = (80-100) = -20
+    C penalty = (40-100) = -60
+    Pool = 20 + 60 = 80
+    A gets +80
+
+  Example (2 winners 75/25, A=100, B=80, C=40):
+    C (only loser) penalty = (40-100) + (40-80) = -60 + -40 = -100
+    Pool = 100
+    A gets 100 * 0.75 = +75
+    B gets 100 * 0.25 = +25
+    Check: 75 + 25 - 100 = 0 ✓
+*/
+function calcScores() {
+  // Gather VPs
+  const vps = {};
+  for (const p of sessionPlayers) {
+    const el = document.getElementById('vp-' + sid(p));
+    const v = parseFloat(el?.value);
+    if (!el || el.value === '' || isNaN(v)) return null;
+    vps[p] = v;
+  }
+
+  // Sort descending by VP
+  const sorted = [...sessionPlayers].sort((a,b) => vps[b] - vps[a]);
+  const winners = sorted.slice(0, winnerCount);
+  const losers  = sorted.slice(winnerCount);
+
+  // Validate splits sum to 100 (only relevant when winnerCount > 1)
+  if (winnerCount > 1) {
+    const splitTotal = winnerSplits.reduce((a,b) => a+b, 0);
+    if (Math.abs(splitTotal - 100) > 0.5) {
+      return { invalid: 'splits', winners, losers, vps };
+    }
+  }
+
+  // Compute loser scores: each loser is only penalised against rank 1 (top player)
+  const top = winners[0];
+  const loserScores = {};
+  for (const loser of losers) {
+    loserScores[loser] = round2(vps[loser] - vps[top]); // always negative
+  }
+
+  // Pool = sum of absolute loser penalties
+  const pool = round2(Object.values(loserScores).reduce((s, v) => s + Math.abs(v), 0));
+
+  // Distribute pool to winners according to splits
+  const winnerScores = {};
+  if (winnerCount === 1) {
+    winnerScores[winners[0]] = pool;
+  } else {
+    winners.forEach((p, i) => {
+      const pct = (winnerSplits[i] || 0) / 100;
+      winnerScores[p] = round2(pool * pct);
+    });
+    // Fix rounding so winners sum exactly equals pool
+    const winSum = round2(Object.values(winnerScores).reduce((a,b)=>a+b,0));
+    const diff = round2(pool - winSum);
+    if (diff !== 0) winnerScores[winners[0]] = round2(winnerScores[winners[0]] + diff);
+  }
+
+  const scores = { ...winnerScores, ...loserScores };
+  return { scores, winners, losers, vps, pool, winnerScores, loserScores };
+}
+
+function recalc() {
+  const result = calcScores();
+
+  if (!result) {
+    sessionPlayers.forEach(p => {
+      const el = document.getElementById('result-' + sid(p));
+      if (el) { el.textContent = '—'; el.className = 'result-cell score-zero'; }
+      const nameEl = document.getElementById('name-' + sid(p));
+      if (nameEl) nameEl.innerHTML = esc(p);
+    });
+    document.getElementById('preview-strip').style.display = 'none';
+    return;
+  }
+
+  const { scores, winners, invalid } = result;
+
+  sessionPlayers.forEach(p => {
+    const isWinner = winners.includes(p);
+    const nameEl = document.getElementById('name-' + sid(p));
+    if (nameEl) {
+      nameEl.innerHTML = esc(p) + (isWinner ? `<span class="winner-badge">Winner</span>` : '');
+    }
+    const resEl = document.getElementById('result-' + sid(p));
+    if (resEl) {
+      if (invalid) {
+        resEl.className = 'result-cell score-zero';
+        resEl.textContent = '—';
+      } else {
+        const pts = scores[p] ?? 0;
+        resEl.className = 'result-cell ' + (pts > 0 ? 'score-pos' : pts < 0 ? 'score-neg' : 'score-zero');
+        resEl.textContent = (pts > 0 ? '+' : '') + pts;
+      }
+    }
+  });
+
+  const strip = document.getElementById('preview-strip');
+  if (invalid === 'splits') {
+    strip.style.display = 'block';
+    strip.innerHTML = '<span style="color:var(--red)">⚠ Fix the winner splits above to see results.</span>';
+    return;
+  }
+
+  const allSorted = [...sessionPlayers].sort((a,b) => (scores[b]??0) - (scores[a]??0));
+  strip.style.display = 'block';
+  strip.innerHTML = allSorted.map(p => {
+    const pts = scores[p] ?? 0;
+    const cls = pts > 0 ? 'score-pos' : pts < 0 ? 'score-neg' : 'score-zero';
+    return `${esc(p)}: <span class="${cls}">${pts>0?'+':''}${pts}</span>`;
+  }).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+}
+
+// ─── SAVE SESSION ─────────────────────────────────────────────────────────────
+function saveSession() {
+  const result = calcScores();
+  if (!result) { alert('Please enter victory points for all players.'); return; }
+  if (result.invalid) { alert('Please make sure winner splits sum to 100%.'); return; }
+
+  const { scores, vps } = result;
+  const game = document.getElementById('session-game').value;
+  const date = document.getElementById('session-date').value || new Date().toISOString().slice(0,10);
+
+  state.sessions.push({ id: Date.now(), game, date, scores, vps, winnerCount, winnerSplits: [...winnerSplits] });
+  save();
+  refreshSelects();
+  refreshYearFilters();
+
+  // Reset
+  sessionPlayers = [];
+  winnerCount = 1;
+  winnerSplits = [100];
+  renderSessionPlayerTags();
+  updateWinnerUI();
+  document.getElementById('session-date').value = '';
+
+  const btn = document.getElementById('save-btn');
+  const orig = btn.textContent;
+  btn.textContent = '✓ Saved!';
+  btn.style.background = 'var(--green)';
+  setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 1800);
+}
+
+function clearScores() {
+  sessionPlayers.forEach(p => {
+    const inp = document.getElementById('vp-' + sid(p));
+    if (inp) inp.value = '';
+  });
+  recalc();
+}
+
+// ─── LEADERBOARD ─────────────────────────────────────────────────────────────
+function renderLeaderboard() {
+  const gf = document.getElementById('lb-game-filter').value;
+  const yf = document.getElementById('lb-year-filter').value;
+  let sessions = state.sessions;
+  if (gf !== 'all') sessions = sessions.filter(s => s.game === gf);
+  if (yf !== 'all') sessions = sessions.filter(s => s.date?.startsWith(yf));
+  const totals = {}, counts = {};
+  sessions.forEach(s => Object.entries(s.scores).forEach(([p,sc]) => {
+    totals[p] = (totals[p]||0) + sc;
+    counts[p] = (counts[p]||0) + 1;
+  }));
+  const sorted = Object.entries(totals).sort((a,b) => b[1]-a[1]);
+  const el = document.getElementById('leaderboard-container');
+  if (!sorted.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🎲</div>No sessions recorded yet</div>'; return; }
+  el.innerHTML = `<table class="leaderboard"><thead><tr><th>#</th><th>Player</th><th>Sessions</th><th>Total Score</th></tr></thead><tbody>
+    ${sorted.map(([p,sc],i) => `<tr>
+      <td><span class="rank rank-${i+1}">${i+1}</span></td>
+      <td>${esc(p)}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:0.9rem;color:var(--text-muted)">${counts[p]}</td>
+      <td class="${sc>0?'score-pos':sc<0?'score-neg':'score-zero'}">${sc>0?'+':''}${sc}</td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+
+function renderSessionLeaderboard() {
+  const gf = document.getElementById('sr-game-filter').value;
+  const yf = document.getElementById('sr-year-filter').value;
+  let sessions = state.sessions;
+  if (gf !== 'all') sessions = sessions.filter(s => s.game === gf);
+  if (yf !== 'all') sessions = sessions.filter(s => s.date?.startsWith(yf));
+  const wins = {};
+  sessions.forEach(s => {
+    const entries = Object.entries(s.scores);
+    if (!entries.length) return;
+    const max = Math.max(...entries.map(x=>x[1]));
+    entries.filter(([,v])=>v===max).forEach(([p])=>{ wins[p]=(wins[p]||0)+1; });
+  });
+  const sorted = Object.entries(wins).sort((a,b)=>b[1]-a[1]);
+  const el = document.getElementById('session-leaderboard-container');
+  if (!sorted.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🏆</div>No sessions recorded yet</div>'; return; }
+  el.innerHTML = `<table class="leaderboard"><thead><tr><th>#</th><th>Player</th><th>Session Wins</th></tr></thead><tbody>
+    ${sorted.map(([p,w],i) => `<tr>
+      <td><span class="rank rank-${i+1}">${i+1}</span></td>
+      <td>${esc(p)}</td>
+      <td class="score-pos">+${w}</td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+
+// ─── HISTORY ─────────────────────────────────────────────────────────────────
+function renderHistory() {
+  const gf = document.getElementById('hist-game-filter').value;
+  const pf = document.getElementById('hist-player-filter').value;
+  let sessions = [...state.sessions].reverse();
+  if (gf !== 'all') sessions = sessions.filter(s => s.game === gf);
+  if (pf !== 'all') sessions = sessions.filter(s => Object.keys(s.scores).includes(pf));
+  const el = document.getElementById('history-container');
+  if (!sessions.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📜</div>No sessions found</div>'; return; }
+  el.innerHTML = sessions.map(s => {
+    const sorted = Object.entries(s.scores).sort((a,b)=>b[1]-a[1]);
+    return `<div class="session-entry">
+      <div class="session-header">
+        <span class="session-game">${esc(s.game)}</span>
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          <span class="session-date">${s.date}</span>
+          <div class="session-actions">
+            <button class="btn-icon" onclick="openEditModal('${s.id}')">Edit</button>
+            <button class="btn-icon danger" data-delete-id="${s.id}" onclick="deleteSession('${s.id}', false)">Delete</button>
+          </div>
+        </div>
+      </div>
+      <div class="session-scores">
+        ${sorted.map(([p,sc]) => `<div class="session-score-item">${esc(p)}: <span class="${sc>0?'score-pos':sc<0?'score-neg':'score-zero'}">${sc>0?'+':''}${sc}</span></div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function deleteSession(id, confirmed) {
+  if (!confirmed) {
+    // Replace the delete button with a confirm prompt inline
+    const btn = document.querySelector(`[data-delete-id="${id}"]`);
+    if (btn) {
+      btn.textContent = 'Sure?';
+      btn.style.borderColor = 'var(--red)';
+      btn.style.color = 'var(--red)';
+      btn.setAttribute('onclick', `deleteSession('${id}', true)`);
+      // Auto-reset after 3s
+      setTimeout(() => {
+        if (btn.textContent === 'Sure?') {
+          btn.textContent = 'Delete';
+          btn.style.borderColor = '';
+          btn.style.color = '';
+          btn.setAttribute('onclick', `deleteSession('${id}', false)`);
+        }
+      }, 3000);
+    }
+    return;
+  }
+  state.sessions = state.sessions.filter(s => String(s.id) !== String(id));
+  save();
+  refreshSelects();
+  refreshYearFilters();
+  renderHistory();
+}
+
+// ─── EDIT MODAL ───────────────────────────────────────────────────────────────
+let editingId = null;
+
+function openEditModal(id) {
+  const session = state.sessions.find(s => String(s.id) === String(id));
+  if (!session) return;
+  editingId = id;
+
+  // Populate game select
+  document.getElementById('edit-game').innerHTML =
+    state.games.map(g => `<option value="${esc(g)}" ${g===session.game?'selected':''}>${esc(g)}</option>`).join('');
+  document.getElementById('edit-date').value = session.date;
+
+  // Populate VP rows
+  const players = Object.keys(session.vps || session.scores);
+  document.getElementById('edit-vp-rows').innerHTML = players.map(p => `
+    <div class="row" style="margin-bottom:0.5rem">
+      <div class="field" style="max-width:150px"><label>${esc(p)}</label></div>
+      <div class="field" style="max-width:100px">
+        <input type="number" id="edit-vp-${sid(p)}" value="${session.vps?.[p] ?? ''}" placeholder="VP"
+          style="font-family:'DM Mono',monospace">
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.remove('open');
+  editingId = null;
+}
+
+function saveEdit() {
+  const session = state.sessions.find(s => String(s.id) === String(editingId));
+  if (!session) return;
+
+  const players = Object.keys(session.vps || session.scores);
+  const newVps = {};
+  for (const p of players) {
+    const v = parseFloat(document.getElementById('edit-vp-' + sid(p))?.value);
+    if (isNaN(v)) { alert(`Please enter a valid VP for ${p}.`); return; }
+    newVps[p] = v;
+  }
+
+  // Recalculate scores using original winner settings
+  const wCount = session.winnerCount || 1;
+  const splits = session.winnerSplits || [100];
+  const sorted = [...players].sort((a,b) => newVps[b] - newVps[a]);
+  const winners = sorted.slice(0, wCount);
+  const losers  = sorted.slice(wCount);
+
+  const top = winners[0];
+  const loserScores = {};
+  for (const loser of losers) {
+    loserScores[loser] = round2(newVps[loser] - newVps[top]);
+  }
+  const pool = round2(Object.values(loserScores).reduce((s,v) => s + Math.abs(v), 0));
+
+  const winnerScores = {};
+  if (wCount === 1) {
+    winnerScores[winners[0]] = pool;
+  } else {
+    winners.forEach((p,i) => { winnerScores[p] = round2(pool * (splits[i]||0) / 100); });
+    const winSum = round2(Object.values(winnerScores).reduce((a,b)=>a+b,0));
+    const diff = round2(pool - winSum);
+    if (diff !== 0) winnerScores[winners[0]] = round2(winnerScores[winners[0]] + diff);
+  }
+
+  session.vps    = newVps;
+  session.scores = { ...winnerScores, ...loserScores };
+  session.game   = document.getElementById('edit-game').value;
+  session.date   = document.getElementById('edit-date').value;
+
+  save();
+  closeEditModal();
+  refreshSelects();
+  refreshYearFilters();
+  renderHistory();
+}
+
+// Close modal on backdrop click
+document.addEventListener('click', function(e) {
+  if (e.target.id === 'edit-modal') closeEditModal();
+});
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function sid(str) { return String(str).replace(/[^a-zA-Z0-9]/g,'_'); }
+function round2(n) { return Math.round(n * 100) / 100; }
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'scoreboard-export.json';
+  a.click();
+}
+
+function clearAllData() {
+  if (confirm('Clear ALL data? This cannot be undone.')) {
+    state = { players:[], games:['Catan','Dominion'], sessions:[] };
+    save(); renderSetup(); refreshSelects();
+    sessionPlayers=[]; winnerCount=1; winnerSplits=[100];
+    renderSessionPlayerTags(); updateWinnerUI();
+  }
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+load();
+renderSetup();
+refreshSelects();
+document.getElementById('session-date').value = new Date().toISOString().slice(0,10);
+</script>
+
+<!-- EDIT SESSION MODAL -->
+<div class="modal-backdrop" id="edit-modal">
+  <div class="modal">
+    <div class="modal-title">Edit Session</div>
+    <div class="modal-field">
+      <label>Game</label>
+      <select id="edit-game"></select>
+    </div>
+    <div class="modal-field">
+      <label>Date</label>
+      <input type="date" id="edit-date">
+    </div>
+    <div class="modal-field">
+      <label style="margin-bottom:0.6rem;display:block">Victory Points</label>
+      <div id="edit-vp-rows"></div>
+    </div>
+    <p class="text-muted" style="font-size:0.85rem;font-style:italic;margin-top:0.5rem">
+      Scores will be recalculated from the updated VPs using the original winner settings.
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-gold" onclick="saveEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
